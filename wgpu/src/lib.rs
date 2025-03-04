@@ -14,10 +14,14 @@
 //! - **`naga`** ---- Enabled when any non-wgsl shader input is enabled.
 //!
 
+#![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/gfx-rs/wgpu/trunk/logo.png")]
 #![warn(
+    clippy::alloc_instead_of_core,
     clippy::allow_attributes,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core,
     missing_docs,
     rust_2018_idioms,
     unsafe_op_in_unsafe_fn
@@ -120,7 +124,5 @@ pub use raw_window_handle as rwh;
 #[cfg(any(webgl, webgpu))]
 pub use web_sys;
 
-/// `web-sys` has a `no_std` mode, and instead refers to the `alloc` crate in its generated code.
-/// Since we vendor the WebGPU bindings we need to explicitly add the `alloc` crate ourselves.
-#[cfg(webgpu)]
-extern crate alloc;
+#[doc(hidden)]
+pub use macros::helpers as __macro_helpers;

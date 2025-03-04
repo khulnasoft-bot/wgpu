@@ -4,9 +4,14 @@ mod handle_set_map;
 mod statements;
 mod types;
 
+use alloc::vec::Vec;
+
 use crate::arena::HandleSet;
 use crate::{arena, compact::functions::FunctionTracer};
 use handle_set_map::HandleMap;
+
+#[cfg(test)]
+use alloc::{format, string::ToString};
 
 /// Remove unused types, expressions, and constants from `module`.
 ///
@@ -110,15 +115,18 @@ pub fn compact(module: &mut crate::Module) {
     log::trace!("tracing special types");
     module_tracer.trace_special_types(&module.special_types);
 
-    // We treat all named constants as used by definition.
+    // We treat all named constants as used by definition, unless they have an
+    // abstract type as we do not want those reaching the validator.
     log::trace!("tracing named constants");
     for (handle, constant) in module.constants.iter() {
-        if constant.name.is_some() {
-            log::trace!("tracing constant {:?}", constant.name.as_ref().unwrap());
-            module_tracer.constants_used.insert(handle);
-            module_tracer.types_used.insert(constant.ty);
-            module_tracer.global_expressions_used.insert(constant.init);
+        if constant.name.is_none() || module.types[constant.ty].inner.is_abstract(&module.types) {
+            continue;
         }
+
+        log::trace!("tracing constant {:?}", constant.name.as_ref().unwrap());
+        module_tracer.constants_used.insert(handle);
+        module_tracer.types_used.insert(constant.ty);
+        module_tracer.global_expressions_used.insert(constant.init);
     }
 
     // We treat all named overrides as used by definition.
@@ -341,7 +349,7 @@ impl<'module> ModuleTracer<'module> {
         let mut max_dep = Vec::with_capacity(self.module.types.len());
         let mut previous = None;
         for (_handle, ty) in self.module.types.iter() {
-            previous = std::cmp::max(
+            previous = core::cmp::max(
                 previous,
                 match ty.inner {
                     crate::TypeInner::Array { size, .. }

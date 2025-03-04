@@ -1,6 +1,8 @@
-use crate::arena::{Arena, Handle, UniqueArena};
+use alloc::{format, string::String};
 
 use thiserror::Error;
+
+use crate::arena::{Arena, Handle, UniqueArena};
 
 /// The result of computing an expression's type.
 ///
@@ -908,6 +910,5 @@ impl<'a> ResolveContext<'a> {
 
 #[test]
 fn test_error_size() {
-    use std::mem::size_of;
     assert_eq!(size_of::<ResolveError>(), 32);
 }

@@ -1,3 +1,12 @@
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+
+use hashbrown::hash_map::Entry;
+use spirv::Word;
+
 use super::{
     block::DebugInfoInner,
     helpers::{contains_builtin, global_needs_wrapper, map_storage_class},
@@ -12,8 +21,6 @@ use crate::{
     proc::{Alignment, TypeResolution},
     valid::{FunctionInfo, ModuleInfo},
 };
-use hashbrown::hash_map::Entry;
-use spirv::Word;
 
 struct FunctionInterface<'a> {
     varying_ids: &'a mut Vec<Word>,
@@ -30,6 +37,9 @@ impl Function {
             Instruction::label(block.label_id).to_words(sink);
             if index == 0 {
                 for local_var in self.variables.values() {
+                    local_var.instruction.to_words(sink);
+                }
+                for local_var in self.force_loop_bounding_vars.iter() {
                     local_var.instruction.to_words(sink);
                 }
                 for internal_var in self.spilled_composites.values() {
@@ -71,6 +81,7 @@ impl Writer {
             flags: options.flags,
             bounds_check_policies: options.bounds_check_policies,
             zero_initialize_workgroup_memory: options.zero_initialize_workgroup_memory,
+            force_loop_bounding: options.force_loop_bounding,
             void_type,
             lookup_type: crate::FastHashMap::default(),
             lookup_function: crate::FastHashMap::default(),
@@ -93,12 +104,12 @@ impl Writer {
     /// `Recyclable::recycle` requires ownership of the value, not just
     /// `&mut`; see the trait documentation. But we need to use this method
     /// from functions like `Writer::write`, which only have `&mut Writer`.
-    /// Workarounds include unsafe code (`std::ptr::read`, then `write`, ugh)
+    /// Workarounds include unsafe code (`core::ptr::read`, then `write`, ugh)
     /// or something like a `Default` impl that returns an oddly-initialized
     /// `Writer`, which is worse.
     fn reset(&mut self) {
         use super::recyclable::Recyclable;
-        use std::mem::take;
+        use core::mem::take;
 
         let mut id_gen = IdGenerator::default();
         let gl450_ext_inst_id = id_gen.next();
@@ -111,6 +122,7 @@ impl Writer {
             flags: self.flags,
             bounds_check_policies: self.bounds_check_policies,
             zero_initialize_workgroup_memory: self.zero_initialize_workgroup_memory,
+            force_loop_bounding: self.force_loop_bounding,
             capabilities_available: take(&mut self.capabilities_available),
             binding_map: take(&mut self.binding_map),
 
@@ -267,6 +279,14 @@ impl Writer {
         self.get_type_id(local_type.into())
     }
 
+    pub(super) fn get_uint2_type_id(&mut self) -> Word {
+        let local_type = LocalType::Numeric(NumericType::Vector {
+            size: crate::VectorSize::Bi,
+            scalar: crate::Scalar::U32,
+        });
+        self.get_type_id(local_type.into())
+    }
+
     pub(super) fn get_uint3_type_id(&mut self) -> Word {
         let local_type = LocalType::Numeric(NumericType::Vector {
             size: crate::VectorSize::Tri,
@@ -278,6 +298,17 @@ impl Writer {
     pub(super) fn get_float_pointer_type_id(&mut self, class: spirv::StorageClass) -> Word {
         let local_type = LocalType::LocalPointer {
             base: NumericType::Scalar(crate::Scalar::F32),
+            class,
+        };
+        self.get_type_id(local_type.into())
+    }
+
+    pub(super) fn get_uint2_pointer_type_id(&mut self, class: spirv::StorageClass) -> Word {
+        let local_type = LocalType::LocalPointer {
+            base: NumericType::Vector {
+                size: crate::VectorSize::Bi,
+                scalar: crate::Scalar::U32,
+            },
             class,
         };
         self.get_type_id(local_type.into())
@@ -296,6 +327,14 @@ impl Writer {
 
     pub(super) fn get_bool_type_id(&mut self) -> Word {
         let local_type = LocalType::Numeric(NumericType::Scalar(crate::Scalar::BOOL));
+        self.get_type_id(local_type.into())
+    }
+
+    pub(super) fn get_bool2_type_id(&mut self) -> Word {
+        let local_type = LocalType::Numeric(NumericType::Vector {
+            size: crate::VectorSize::Bi,
+            scalar: crate::Scalar::BOOL,
+        });
         self.get_type_id(local_type.into())
     }
 
@@ -835,10 +874,11 @@ impl Writer {
             fun_info: info,
             function: &mut function,
             // Re-use the cached expression table from prior functions.
-            cached: std::mem::take(&mut self.saved_cached),
+            cached: core::mem::take(&mut self.saved_cached),
 
             // Steal the Writer's temp list for a bit.
-            temp_list: std::mem::take(&mut self.temp_list),
+            temp_list: core::mem::take(&mut self.temp_list),
+            force_loop_bounding: self.force_loop_bounding,
             writer: self,
             expression_constness: super::ExpressionConstnessTracker::from_arena(
                 &ir_function.expressions,
@@ -1537,6 +1577,10 @@ impl Writer {
         semantics.set(
             spirv::MemorySemantics::WORKGROUP_MEMORY,
             flags.contains(crate::Barrier::WORK_GROUP),
+        );
+        semantics.set(
+            spirv::MemorySemantics::IMAGE_MEMORY,
+            flags.contains(crate::Barrier::TEXTURE),
         );
         let exec_scope_id = if flags.contains(crate::Barrier::SUB_GROUP) {
             self.get_index_constant(spirv::Scope::Subgroup as u32)

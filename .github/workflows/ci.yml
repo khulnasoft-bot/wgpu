@@ -3,11 +3,11 @@ name: CI
 on:
   push:
     branches-ignore: [
-        # We don't need to run on dependabot PRs.
-        "dependabot/**",
-        # This is the branch the merge queue creates.
-        "gh-readonly-queue/**",
-      ]
+      # We don't need to run on dependabot PRs.
+      "dependabot/**",
+      # This is the branch the merge queue creates.
+      "gh-readonly-queue/**"
+    ]
     tags: [v0.*]
   pull_request:
   merge_group:
@@ -18,8 +18,9 @@ env:
   #
 
   # Sourced from https://vulkan.lunarg.com/sdk/home#linux
-  VULKAN_SDK_VERSION: "1.4.304"
-  VULKAN_FULL_SDK_VERSION: "1.4.304.1"
+  #
+  # We don't include the 4th version number, as it's not used in any URL.
+  VULKAN_SDK_VERSION: "1.3.290"
   # Sourced from https://www.nuget.org/packages/Microsoft.Direct3D.WARP
   WARP_VERSION: "1.0.13"
 
@@ -31,10 +32,14 @@ env:
 
   # Sourced from https://archive.mesa3d.org/. Bumping this requires
   # updating the mesa build in https://github.com/gfx-rs/ci-build and creating a new release.
-  MESA_VERSION: "24.3.4"
+  MESA_VERSION: "24.2.3"
   # Corresponds to https://github.com/gfx-rs/ci-build/releases
-  CI_BINARY_BUILD: "build20"
+  CI_BINARY_BUILD: "build19"
 
+  # We sometimes need nightly to use special things in CI.
+  #
+  # In order to prevent CI regressions, we pin the nightly version.
+  NIGHTLY_VERSION: "nightly-2024-10-17"
   # This is the MSRV used by `wgpu` itself and all surrounding infrastructure.
   REPO_MSRV: "1.83"
   # This is the MSRV used by the `wgpu-core`, `wgpu-hal`, and `wgpu-types` crates,
@@ -54,15 +59,15 @@ env:
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   WASM_BINDGEN_TEST_TIMEOUT: 300 # 5 minutes
-  CACHE_SUFFIX: d # cache busting
-  WGPU_CI: true
+  CACHE_SUFFIX: c # cache busting
+  WGPU_TESTING: true
 
 # We distinguish the following kinds of builds:
 # - native: build for the same target as we compile on
 # - web: build for the Web
 # - em: build for the Emscripten
 
-# For build time and size optimization we disable debug symbols
+# For build time and size optimization we disable debug
 # entirely on clippy jobs and reduce it to line-numbers
 # only for ones where we run tests.
 #
@@ -144,13 +149,6 @@ jobs:
             tier: 2
             kind: native
 
-          # OpenHarmony
-          - name: OpenHarmony aarch64
-            os: ubuntu-22.04
-            target: aarch64-unknown-linux-ohos
-            tier: 2
-            kind: native
-
           # WebGPU/WebGL
           - name: WebAssembly
             os: ubuntu-22.04
@@ -163,7 +161,7 @@ jobs:
             target: wasm32-unknown-emscripten
             tier: 2
             kind: wgpu-only
-
+          
           # TODO: Uncomment once web-sys updates past 0.3.76
           # See https://github.com/rustwasm/wasm-bindgen/pull/4378 for details
           # - name: WebAssembly Core 1.0
@@ -171,7 +169,7 @@ jobs:
           #   target: wasm32v1-none
           #   tier: 2
           #   kind: no_std
-
+          
           # Bare-metal x86-64
           # TODO: Remove once web-sys updates past 0.3.76
           # Included while wasm32v1-none is failing to ensure `no_std` does not regress
@@ -213,15 +211,13 @@ jobs:
           rustup toolchain install ${{ env.REPO_MSRV }} --no-self-update --profile=minimal --component clippy,rust-src
           echo "RUSTC_BOOTSTRAP=1" >> "$GITHUB_ENV"
 
-      - name: disable debug symbols
+      - name: disable debug
         shell: bash
         run: |
           mkdir -p .cargo
-
-          cat <<EOF >> .cargo/config.toml
-            [profile.dev]
-            debug = false
-          EOF
+          echo """
+          [profile.dev]
+          debug = false" >> .cargo/config.toml
 
       - name: caching
         uses: Swatinem/rust-cache@v2
@@ -280,7 +276,7 @@ jobs:
           # Check with all features.
           cargo clippy --target ${{ matrix.target }} ${{ matrix.extra-flags }} -p wgpu-hal --all-features
           cargo clippy --target ${{ matrix.target }} ${{ matrix.extra-flags }} -p wgpu --all-features
-
+        
       # Building for no_std platforms where every feature is enabled except "std".
       - name: check no_std
         if: matrix.kind == 'no_std'
@@ -363,15 +359,13 @@ jobs:
           rustup override set ${{ env.CORE_MSRV }}
           cargo -V
 
-      - name: disable debug symbols
+      - name: disable debug
         shell: bash
         run: |
           mkdir -p .cargo
-
-          cat <<EOF >> .cargo/config.toml
-            [profile.dev]
-            debug = false
-          EOF
+          echo """
+          [profile.dev]
+          debug = false" >> .cargo/config.toml
 
       - name: caching
         uses: Swatinem/rust-cache@v2
@@ -405,15 +399,15 @@ jobs:
 
       - name: Install Nightly Toolchain
         run: |
-          rustup toolchain install ${{ env.REPO_MSRV }} --no-self-update --profile=minimal
-          cargo +${{ env.REPO_MSRV }} -V
+          rustup toolchain install ${{ env.NIGHTLY_VERSION }} --no-self-update --profile=minimal --component clippy
+          cargo +${{ env.NIGHTLY_VERSION }} -V
 
       - name: Install cargo-hack
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
 
-      - name: disable debug symbols
+      - name: disable debug
         shell: bash
         run: |
           mkdir -p .cargo
@@ -426,9 +420,7 @@ jobs:
         run: |
           set -e
 
-          cargo +${{ env.REPO_MSRV }} hack generate-lockfile --remove-dev-deps -Z minimal-versions -p naga -p naga-cli
-        env:
-          RUSTC_BOOTSTRAP: 1
+          cargo +${{ env.NIGHTLY_VERSION }} hack generate-lockfile --remove-dev-deps -Z minimal-versions -p naga -p naga-cli
 
       - name: Clippy
         shell: bash
@@ -443,6 +435,7 @@ jobs:
 
     name: Test WebAssembly
     runs-on: ubuntu-latest
+    needs: [check]
 
     steps:
       - name: checkout repo
@@ -482,10 +475,11 @@ jobs:
 
           # Linux
           - name: Linux x86_64
-            os: ubuntu-24.04
+            os: ubuntu-22.04
 
     name: Test ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    needs: [check]
 
     steps:
       - name: checkout repo
@@ -500,16 +494,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
-
-      - name: debug symbols to line-tables-only
-        shell: bash
-        run: |
-          mkdir -p .cargo
-
-          cat <<EOF >> .cargo/config.toml
-            [profile.dev]
-            debug = "line-tables-only"
-          EOF
 
         # Cache step must go before warp and mesa install on windows as they write into the
         # target directory, and rust-cache will overwrite the entirety of the target directory.
@@ -566,34 +550,8 @@ jobs:
           echo "VK_DRIVER_FILES=`cygpath --windows $PWD/mesa/lvp_icd.x86_64.json`" >> "$GITHUB_ENV"
           echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
 
-      - name: (windows) install vulkan sdk
-        if: matrix.os == 'windows-2022'
-        shell: bash
-        run: |
-          set -e
-
-          curl.exe -L --retry 5 https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_FULL_SDK_VERSION }}/windows/VulkanSDK-${{ env.VULKAN_FULL_SDK_VERSION }}-Installer.exe -o vulkan-sdk-installer.exe
-
-          ./vulkan-sdk-installer.exe --accept-licenses --default-answer --confirm-command install
-
-          echo "C:/VulkanSDK/${{ env.VULKAN_FULL_SDK_VERSION }}/Bin" >> "$GITHUB_PATH"
-
-      - name: (mac) install vulkan sdk
-        if: matrix.os == 'macos-14'
-        shell: bash
-        run: |
-          set -e
-
-          curl -L --retry 5 https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_FULL_SDK_VERSION }}/mac/vulkansdk-macos-${{ env.VULKAN_FULL_SDK_VERSION }}.zip -o vulkan-sdk.zip
-          unzip vulkan-sdk.zip -d vulkan-sdk
-
-          ls -l vulkan-sdk
-          sudo ./vulkan-sdk/InstallVulkan-${{ env.VULKAN_FULL_SDK_VERSION }}.app/Contents/MacOS/InstallVulkan-${{ env.VULKAN_FULL_SDK_VERSION }} --root "$HOME/VulkanSDK" --accept-licenses --default-answer --confirm-command install
-
-          echo "$HOME/VulkanSDK/macOS/bin" >> "$GITHUB_PATH"
-
       - name: (linux) install vulkan sdk
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'ubuntu-22.04'
         shell: bash
         run: |
           set -e
@@ -602,13 +560,13 @@ jobs:
 
           # vulkan sdk
           wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-${{ env.VULKAN_SDK_VERSION }}-noble.list https://packages.lunarg.com/vulkan/${{ env.VULKAN_SDK_VERSION }}/lunarg-vulkan-$VULKAN_SDK_VERSION-noble.list
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-$VULKAN_SDK_VERSION-jammy.list https://packages.lunarg.com/vulkan/$VULKAN_SDK_VERSION/lunarg-vulkan-$VULKAN_SDK_VERSION-jammy.list
 
           sudo apt-get update
           sudo apt install -y vulkan-sdk
 
       - name: (linux) install mesa
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'ubuntu-22.04'
         shell: bash
         run: |
           set -e
@@ -633,6 +591,14 @@ jobs:
           echo "VK_DRIVER_FILES=$PWD/icd.json" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$PWD/mesa/lib/x86_64-linux-gnu/:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
           echo "LIBGL_DRIVERS_PATH=$PWD/mesa/lib/x86_64-linux-gnu/dri" >> "$GITHUB_ENV"
+
+      - name: disable debug
+        shell: bash
+        run: |
+          mkdir -p .cargo
+          echo """
+          [profile.dev]
+          debug = 1" >> .cargo/config.toml
 
       - name: run wgpu-info
         shell: bash
@@ -696,6 +662,14 @@ jobs:
           rustup override set ${{ env.REPO_MSRV }}
           cargo -V
 
+      - name: disable debug
+        shell: bash
+        run: |
+          mkdir -p .cargo
+          echo """
+          [profile.dev]
+          debug = 1" >> .cargo/config.toml
+
       - name: caching
         uses: Swatinem/rust-cache@v2
         with:
@@ -739,7 +713,7 @@ jobs:
         run: taplo format --check --diff
 
       - name: Check for typos
-        uses: crate-ci/typos@v1.29.7
+        uses: crate-ci/typos@v1.29.4
 
   check-cts-runner:
     # runtime is normally 2 minutes
@@ -757,15 +731,13 @@ jobs:
           rustup override set ${{ env.REPO_MSRV }}
           cargo -V
 
-      - name: disable debug symbols
+      - name: disable debug
         shell: bash
         run: |
           mkdir -p .cargo
-
-          cat <<EOF >> .cargo/config.toml
-            [profile.dev]
-            debug = false
-          EOF
+          echo """
+          [profile.dev]
+          debug = 1" >> .cargo/config.toml
 
       - name: caching
         uses: Swatinem/rust-cache@v2
@@ -812,22 +784,3 @@ jobs:
           command: check bans licenses sources
           arguments: --all-features --workspace
           rust-version: ${{ env.REPO_MSRV }}
-
-  check-feature-dependencies:
-    # runtime is normally 1 minute
-    timeout-minutes: 5
-
-    name: "Feature Dependencies"
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout repo
-        uses: actions/checkout@v4
-
-      - name: Install Repo MSRV toolchain
-        run: |
-          rustup toolchain install ${{ env.REPO_MSRV }} --no-self-update --profile=minimal
-          rustup override set ${{ env.REPO_MSRV }}
-          cargo -V
-
-      - name: Run `cargo feature-dependencies`
-        run: cargo xtask check-feature-dependencies

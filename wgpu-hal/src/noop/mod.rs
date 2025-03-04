@@ -1,8 +1,14 @@
 #![allow(unused_variables)]
 
+use alloc::{string::String, vec, vec::Vec};
+use core::{ptr, sync::atomic::Ordering, time::Duration};
+
+#[cfg(supports_64bit_atomics)]
+use core::sync::atomic::AtomicU64;
+#[cfg(not(supports_64bit_atomics))]
+use portable_atomic::AtomicU64;
+
 use crate::TlasInstance;
-use core::ptr;
-use core::sync::atomic::{AtomicU64, Ordering};
 
 mod buffer;
 pub use buffer::Buffer;
@@ -71,7 +77,7 @@ impl crate::DynSurfaceTexture for Resource {}
 impl crate::DynTexture for Resource {}
 impl crate::DynTextureView for Resource {}
 
-impl std::borrow::Borrow<dyn crate::DynTexture> for Resource {
+impl core::borrow::Borrow<dyn crate::DynTexture> for Resource {
     fn borrow(&self) -> &dyn crate::DynTexture {
         self
     }
@@ -202,7 +208,7 @@ impl crate::Surface for Context {
 
     unsafe fn acquire_texture(
         &self,
-        timeout: Option<std::time::Duration>,
+        timeout: Option<Duration>,
         fence: &Fence,
     ) -> Result<Option<crate::AcquiredSurfaceTexture<Api>>, crate::SurfaceError> {
         Ok(None)
@@ -360,6 +366,16 @@ impl crate::Device for Context {
         &self,
         desc: &crate::RenderPipelineDescriptor<Resource, Resource, Resource>,
     ) -> Result<Resource, crate::PipelineError> {
+        Ok(Resource)
+    }
+    unsafe fn create_mesh_pipeline(
+        &self,
+        desc: &crate::MeshPipelineDescriptor<
+            <Self::A as crate::Api>::PipelineLayout,
+            <Self::A as crate::Api>::ShaderModule,
+            <Self::A as crate::Api>::PipelineCache,
+        >,
+    ) -> Result<<Self::A as crate::Api>::RenderPipeline, crate::PipelineError> {
         Ok(Resource)
     }
     unsafe fn destroy_render_pipeline(&self, pipeline: Resource) {}

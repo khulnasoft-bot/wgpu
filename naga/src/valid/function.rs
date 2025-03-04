@@ -1,12 +1,12 @@
-use crate::arena::{Arena, UniqueArena};
-use crate::arena::{Handle, HandleSet};
+use alloc::{format, string::String};
 
 use super::validate_atomic_compare_exchange_struct;
-
 use super::{
     analyzer::{UniformityDisruptor, UniformityRequirements},
     ExpressionError, FunctionInfo, ModuleInfo,
 };
+use crate::arena::{Arena, UniqueArena};
+use crate::arena::{Handle, HandleSet};
 use crate::span::WithSpan;
 use crate::span::{AddSpan as _, MapErrWithSpan as _};
 
@@ -1140,10 +1140,10 @@ impl super::Validator {
                     };
 
                     // The `coordinate` operand must be a vector of the appropriate size.
-                    if !context
+                    if context
                         .resolve_type(coordinate, &self.valid_expression_set)?
                         .image_storage_coordinates()
-                        .is_some_and(|coord_dim| coord_dim == dim)
+                        .is_none_or(|coord_dim| coord_dim != dim)
                     {
                         return Err(FunctionError::InvalidImageStore(
                             ExpressionError::InvalidImageCoordinateType(dim, coordinate),
