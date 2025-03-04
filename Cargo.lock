@@ -2180,7 +2180,7 @@ checksum = "b4ce301924b7887e9d637144fdade93f9dfff9b60981d4ac161db09720d39aa5"
 
 [[package]]
 name = "lock-analyzer"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "anyhow",
  "ron",
@@ -2967,7 +2967,7 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
 name = "player"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "env_logger",
  "log",
@@ -4494,7 +4494,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "arrayvec",
  "bitflags 2.8.0",
@@ -4520,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-benchmark"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -4583,7 +4583,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-examples"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -4667,7 +4667,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-info"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.8.0",
@@ -4681,7 +4681,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-macros"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "heck 0.5.0",
  "quote",
@@ -4690,7 +4690,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-test"
-version = "24.0.0"
+version = "24.0.1"
 dependencies = [
  "anyhow",
  "approx",
